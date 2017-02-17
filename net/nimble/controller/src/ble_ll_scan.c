@@ -588,8 +588,14 @@ ble_ll_scan_start(struct ble_ll_scan_sm *scansm, uint8_t chan)
     }
 #endif
 
-    /* Start receiving */
-    rc = ble_phy_rx();
+#if MYNEWT_VAL(OS_CPUTIME_FREQ) == 32768
+        /* XXX: probably need to make sure hfxo is running too */
+        /* XXX: can make this better; want to just start asap. */
+        rc = ble_phy_rx_set_start_time(os_cputime_get32() +
+                                       g_ble_ll_sched_offset_ticks, 0);
+#else
+        rc = ble_phy_rx();
+#endif
     if (!rc) {
         /* Enable/disable whitelisting */
         if (scansm->scan_filt_policy & 1) {
@@ -929,8 +935,7 @@ ble_ll_scan_rx_isr_end(struct os_mbuf *rxpdu, uint8_t crcok)
         if (scansm->scan_rsp_pending) {
             ble_ll_scan_req_backoff(scansm, 0);
         }
-        ble_phy_disable();
-        ble_phy_rx();
+        ble_phy_restart_rx();
         return 0;
     }
 
@@ -1081,8 +1086,6 @@ ble_ll_scan_wfr_timer_exp(void)
 {
     struct ble_ll_scan_sm *scansm;
 
-    ble_phy_disable();
-
     /*
      * If we timed out waiting for a response, the scan response pending
      * flag should be set. Deal with scan backoff. Put device back into rx.
@@ -1091,7 +1094,8 @@ ble_ll_scan_wfr_timer_exp(void)
     if (scansm->scan_rsp_pending) {
         ble_ll_scan_req_backoff(scansm, 0);
     }
-    ble_phy_rx();
+
+    ble_phy_restart_rx();
 }
 
 /**

@@ -51,6 +51,11 @@
  * 4) Should look into always disabled the wfr interrupt if we receive the
  * start of a frame. Need to look at the various states to see if this is the
  * right thing to do.
+ * 5) I am not sure that if we are passed the output compare that we actually
+ * get the interrupt. Test this.
+ * 6) I am not sure that if we receive a packet while scanning that we actually
+ * go back to scanning. I need to make sure we re-enable the receive.
+ * Put an event in the log!
  */
 
 /* Supported states */
@@ -536,7 +541,9 @@ ble_ll_wfr_timer_exp(void *arg)
 void
 ble_ll_wfr_enable(uint32_t cputime)
 {
+#if MYNEWT_VAL(OS_CPUTIME_FREQ) != 32768
     os_cputime_timer_start(&g_ble_ll_data.ll_wfr_timer, cputime);
+#endif
 }
 
 /**
@@ -545,7 +552,9 @@ ble_ll_wfr_enable(uint32_t cputime)
 void
 ble_ll_wfr_disable(void)
 {
+#if MYNEWT_VAL(OS_CPUTIME_FREQ) != 32768
     os_cputime_timer_stop(&g_ble_ll_data.ll_wfr_timer);
+#endif
 }
 
 /**
@@ -786,7 +795,12 @@ ble_ll_rx_start(uint8_t *rxbuf, uint8_t chan, struct ble_mbuf_hdr *rxhdr)
     int rc;
     uint8_t pdu_type;
 
+#if MYNEWT_VAL(OS_CPUTIME_FREQ) == 32768
+    ble_ll_log(BLE_LL_LOG_ID_RX_START, chan, rxhdr->rem_usecs,
+               rxhdr->beg_cputime);
+#else
     ble_ll_log(BLE_LL_LOG_ID_RX_START, chan, 0, rxhdr->beg_cputime);
+#endif
 
     /* Check channel type */
     if (chan < BLE_PHY_NUM_DATA_CHANS) {
@@ -1241,9 +1255,11 @@ ble_ll_init(void)
                     ble_ll_hw_err_timer_cb,
                     NULL);
 
+#if MYNEWT_VAL(OS_CPUTIME_FREQ) != 32768
     /* Initialize wait for response timer */
     os_cputime_timer_init(&g_ble_ll_data.ll_wfr_timer, ble_ll_wfr_timer_exp,
                           NULL);
+#endif
 
     /* Initialize LL HCI */
     ble_ll_hci_init();

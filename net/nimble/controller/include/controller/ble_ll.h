@@ -362,6 +362,9 @@ void ble_ll_wfr_enable(uint32_t cputime);
 /* Disable wait for response timer */
 void ble_ll_wfr_disable(void);
 
+/* Wait for response timer expiration callback */
+void ble_ll_wfr_timer_exp(void *arg);
+
 /* Read set of features supported by the Link Layer */
 uint8_t ble_ll_read_supp_features(void);
 
@@ -383,7 +386,7 @@ int ble_ll_rand_start(void);
  * XXX: temporary LL debug log. Will get removed once we transition to real
  * log
  */
-#undef BLE_LL_LOG
+#define BLE_LL_LOG
 #include "console/console.h"
 
 #define BLE_LL_LOG_ID_PHY_SETCHAN       (1)
