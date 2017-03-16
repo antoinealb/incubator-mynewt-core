@@ -149,6 +149,11 @@ int ble_ll_sched_next_time(uint32_t *next_event_time);
 /* Stop the scheduler */
 void ble_ll_sched_stop(void);
 
+#ifdef BLE_XCVR_RFCLK
+/* Check if RF clock needs to be restarted */
+void ble_ll_sched_rfclk_chk_restart(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

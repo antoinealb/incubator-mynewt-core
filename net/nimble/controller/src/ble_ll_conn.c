@@ -2049,6 +2049,10 @@ ble_ll_conn_event_end(struct os_event *ev)
     /* Check if we need to resume scanning */
     ble_ll_scan_chk_resume();
 
+#ifdef BLE_XCVR_RFCLK
+    ble_ll_sched_rfclk_chk_restart();
+#endif
+
     /* If we have transmitted the terminate IND successfully, we are done */
     if ((connsm->csmflags.cfbit.terminate_ind_txd) ||
         (connsm->csmflags.cfbit.terminate_ind_rxd)) {

@@ -28,10 +28,16 @@
 #include "controller/ble_ll_sched.h"
 #include "controller/ble_ll_adv.h"
 #include "controller/ble_ll_scan.h"
+#include "controller/ble_ll_xcvr.h"
 #include "ble_ll_conn_priv.h"
 
 /* XXX: this is temporary. Not sure what I want to do here */
 struct hal_timer g_ble_ll_sched_timer;
+
+#ifdef BLE_XCVR_RFCLK
+/* Settling time of crystal, in ticks */
+uint8_t g_ble_ll_sched_xtal_ticks;
+#endif
 
 #if MYNEWT_VAL(OS_CPUTIME_FREQ) == 32768
 uint8_t g_ble_ll_sched_offset_ticks;
@@ -253,8 +259,17 @@ ble_ll_sched_conn_reschedule(struct ble_ll_conn_sm *connsm)
         entry = start_overlap;
     }
 
+#ifdef BLE_XCVR_RFCLK
+    entry = TAILQ_FIRST(&g_ble_ll_sched_q);
+    if (entry == sch) {
+        ble_ll_rfclk_start(sch->start_time);
+    } else {
+        sch = entry;
+    }
+#else
     /* Get first on list */
     sch = TAILQ_FIRST(&g_ble_ll_sched_q);
+#endif
 
     OS_EXIT_CRITICAL(sr);
 
@@ -450,6 +465,15 @@ ble_ll_sched_master_new(struct ble_ll_conn_sm *connsm,
     return rc;
 }
 
+/**
+ * Schedules a slave connection for the first time.
+ *
+ * Context: Link Layer
+ *
+ * @param connsm
+ *
+ * @return int
+ */
 int
 ble_ll_sched_slave_new(struct ble_ll_conn_sm *connsm)
 {
@@ -458,6 +482,11 @@ ble_ll_sched_slave_new(struct ble_ll_conn_sm *connsm)
     struct ble_ll_sched_item *entry;
     struct ble_ll_sched_item *next_sch;
     struct ble_ll_sched_item *sch;
+
+#ifdef BLE_XCVR_RFCLK
+    int first;
+    first = 0;
+#endif
 
     /* Get schedule element from connection */
     rc = -1;
@@ -494,6 +523,9 @@ ble_ll_sched_slave_new(struct ble_ll_conn_sm *connsm)
     if (!entry) {
         /* Nothing in schedule. Schedule as soon as possible */
         rc = 0;
+#ifdef BLE_XCVR_RFCLK
+        first = 1;
+#endif
     } else {
         os_cputime_timer_stop(&g_ble_ll_sched_timer);
         while (1) {
@@ -526,8 +558,23 @@ ble_ll_sched_slave_new(struct ble_ll_conn_sm *connsm)
         if (!rc) {
             sch->enqueued = 1;
         }
+#ifdef BLE_XCVR_RFCLK
+        next_sch = TAILQ_FIRST(&g_ble_ll_sched_q);
+        if (next_sch == sch) {
+            first = 1;
+        } else {
+            sch = next_sch;
+        }
+#else
         sch = TAILQ_FIRST(&g_ble_ll_sched_q);
+#endif
     }
+
+#ifdef BLE_XCVR_RFCLK
+    if (first) {
+        ble_ll_rfclk_start(sch->start_time);
+    }
+#endif
 
     OS_EXIT_CRITICAL(sr);
 
@@ -589,6 +636,12 @@ ble_ll_sched_adv_new(struct ble_ll_sched_item *sch)
     }
 
     ble_ll_adv_scheduled((struct ble_ll_adv_sm *)orig->cb_arg, adv_start);
+
+#ifdef BLE_XCVR_RFCLK
+    if (orig == sch) {
+        ble_ll_rfclk_start(sch->start_time);
+    }
+#endif
 
     OS_EXIT_CRITICAL(sr);
 
@@ -708,6 +761,12 @@ ble_ll_sched_adv_reschedule(struct ble_ll_sched_item *sch, uint32_t *start,
         }
         sch->end_time = sch->start_time + duration;
         *start = sch->start_time;
+
+#ifdef BLE_XCVR_RFCLK
+        if (sch == TAILQ_FIRST(&g_ble_ll_sched_q)) {
+            ble_ll_rfclk_start(sch->start_time);
+        }
+#endif
     }
 
     OS_EXIT_CRITICAL(sr);
@@ -898,6 +957,53 @@ ble_ll_sched_next_time(uint32_t *next_event_time)
 
     return rc;
 }
+
+#ifdef BLE_XCVR_RFCLK
+void
+ble_ll_sched_rfclk_chk_restart(void)
+{
+    int stop;
+    os_sr_t sr;
+    uint8_t ll_state;
+    int32_t time_till_next;
+    uint32_t next_time;
+
+    stop = 0;
+    OS_ENTER_CRITICAL(sr);
+    ll_state = ble_ll_state_get();
+    if (ble_ll_sched_next_time(&next_time)) {
+        /*
+         * If the time until the next event is too close, no need to start
+         * the timer and leave the clock on
+         */
+        time_till_next = (int32_t)(next_time - os_cputime_get32());
+        if (time_till_next > g_ble_ll_data.ll_xtal_ticks) {
+            /* Stop the clock */
+            stop = 1;
+
+            /*
+             * Restart the timer as long as not advertising or in connection
+             * event
+             */
+            if (!((ll_state == BLE_LL_STATE_ADV) ||
+                  (ll_state == BLE_LL_STATE_CONNECTION))) {
+                ble_ll_xcvr_rfclk_start(next_time - g_ble_ll_data.ll_xtal_ticks);
+            }
+        }
+    } else {
+        stop = 1;
+    }
+
+    if (stop && (ll_state == BLE_LL_STATE_STANDBY)) {
+        ble_ll_log(BLE_LL_LOG_ID_RFCLK_SCHED_DIS, g_ble_ll_data.ll_rfclk_state,
+                   0, 0);
+        ble_ll_xcvr_rfclk_disable();
+    }
+    OS_EXIT_CRITICAL(sr);
+}
+
+#endif
+
 
 /**
  * Stop the scheduler

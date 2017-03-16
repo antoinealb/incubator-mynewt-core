@@ -746,6 +746,10 @@ ble_ll_adv_sm_stop(struct ble_ll_adv_sm *advsm)
             ble_ll_wfr_disable();
             ble_ll_state_set(BLE_LL_STATE_STANDBY);
             g_ble_ll_cur_adv_sm = NULL;
+            ble_ll_scan_chk_resume();
+#ifdef BLE_XCVR_RFCLK
+            ble_ll_sched_rfclk_chk_restart();
+#endif
         }
 #else
         if (ble_ll_state_get() == BLE_LL_STATE_ADV) {
@@ -753,6 +757,12 @@ ble_ll_adv_sm_stop(struct ble_ll_adv_sm *advsm)
             ble_ll_wfr_disable();
             ble_ll_state_set(BLE_LL_STATE_STANDBY);
             g_ble_ll_cur_adv_sm = NULL;
+            ble_ll_scan_chk_resume();
+#ifdef BLE_XCVR_RFCLK
+            /* WWW */
+            ble_ll_log(201,0,0,0);
+            ble_ll_sched_rfclk_chk_restart();
+#endif
         }
 #endif
         OS_EXIT_CRITICAL(sr);
@@ -1508,6 +1518,11 @@ ble_ll_adv_done(struct ble_ll_adv_sm *advsm)
         /* Check if we need to resume scanning */
         ble_ll_scan_chk_resume();
 
+        /* Turn off the clock if not doing anything else */
+#ifdef BLE_XCVR_RFCLK
+        ble_ll_sched_rfclk_chk_restart();
+#endif
+
         /* This event is over. Set adv channel to first one */
         advsm->adv_chan = ble_ll_adv_first_chan(advsm);
 
@@ -1600,6 +1615,14 @@ ble_ll_adv_done(struct ble_ll_adv_sm *advsm)
     /* Schedule advertising transmit */
     ble_ll_adv_set_sched(advsm);
 
+    /* WWW: Need to look at direct advertising (HD) to see if I messed up
+     * the resched pdu call.
+     *
+     * For xcvr clock, we only need to worry when we schedule new adv
+     * event. We want to make sure we dont turn off the clock if we are
+     * not done with the advertising event. Think about this.
+     */
+
     /*
      * In the unlikely event we cant reschedule this, just post a done
      * event and we will reschedule the next advertising event
@@ -1607,6 +1630,7 @@ ble_ll_adv_done(struct ble_ll_adv_sm *advsm)
     if (resched_pdu) {
         rc = ble_ll_sched_adv_resched_pdu(&advsm->adv_sch);
     } else {
+        /* Reschedule advertising event */
         rc = ble_ll_sched_adv_reschedule(&advsm->adv_sch, &start_time,
                                          max_delay_ticks);
         if (!rc) {

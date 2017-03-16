@@ -35,7 +35,7 @@ syscfg.defs:
 
     BLE_MAX_CONNECTIONS:
         description: 'The maximum number of concurrent connections.'
-        value: 1
+        value: 8
     BLE_WHITELIST:
         description: 'TBD'
         value: 1

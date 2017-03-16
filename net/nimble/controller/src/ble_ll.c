@@ -39,6 +39,7 @@
 #include "controller/ble_ll_hci.h"
 #include "controller/ble_ll_whitelist.h"
 #include "controller/ble_ll_resolv.h"
+#include "controller/ble_ll_xcvr.h"
 #include "ble_ll_conn_priv.h"
 
 /* XXX:
@@ -223,6 +224,15 @@ ble_ll_log(uint8_t id, uint8_t arg8, uint16_t arg16, uint32_t arg32)
 {
     os_sr_t sr;
     struct ble_ll_log *le;
+
+    /* WWW */
+    if ((id >= 90) || (id == 10) || (id == 20)) {
+        goto good;
+    } else {
+        return;
+    }
+good:
+    /* WWW */
 
     OS_ENTER_CRITICAL(sr);
     le = &g_ble_ll_log[g_ble_ll_log_index];
@@ -1181,6 +1191,11 @@ ble_ll_reset(void)
     /* Set state to standby */
     ble_ll_state_set(BLE_LL_STATE_STANDBY);
 
+#ifdef BLE_XCVR_RFCLK
+    /* Stops rf clock and rfclock timer */
+    ble_ll_xcvr_rfclk_stop();
+#endif
+
     /* Reset our random address */
     memset(g_random_addr, 0, BLE_DEV_ADDR_LEN);
 
@@ -1225,10 +1240,25 @@ ble_ll_init(void)
 {
     int rc;
     uint8_t features;
+#ifdef BLE_XCVR_RFCLK
+    uint32_t xtal_ticks;
+#endif
     struct ble_ll_obj *lldata;
 
     /* Ensure this function only gets called by sysinit. */
     SYSINIT_ASSERT_ACTIVE();
+
+#ifdef BLE_XCVR_RFCLK
+    /* Settling time of crystal, in ticks */
+    xtal_ticks = MYNEWT_VAL(BLE_XTAL_SETTLE_TIME);
+    assert(xtal_ticks != 0);
+    g_ble_ll_data.ll_xtal_ticks = os_cputime_usecs_to_ticks(xtal_ticks);
+
+    /* Initialize rf clock timer */
+    os_cputime_timer_init(&g_ble_ll_data.ll_rfclk_timer,
+                          ble_ll_xcvr_rfclk_timer_exp, NULL);
+
+#endif
 
     /* Get pointer to global data object */
     lldata = &g_ble_ll_data;

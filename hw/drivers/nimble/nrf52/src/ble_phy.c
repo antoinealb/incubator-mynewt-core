@@ -794,6 +794,8 @@ int
 ble_phy_init(void)
 {
     int rc;
+
+#if !defined(BLE_XCVR_RFCLK)
     uint32_t os_tmo;
 
     /* Make sure HFXO is started */
@@ -808,6 +810,7 @@ ble_phy_init(void)
             return BLE_PHY_ERR_INIT;
         }
     }
+#endif
 
     /* Set phy channel to an invalid channel so first set channel works */
     g_ble_phy_data.phy_chan = BLE_PHY_NUM_CHANS;
@@ -1496,5 +1499,19 @@ void
 ble_phy_resolv_list_disable(void)
 {
     g_ble_phy_data.phy_privacy = 0;
+}
+#endif
+
+#ifdef BLE_XCVR_RFCLK
+void
+ble_phy_rfclk_enable(void)
+{
+    NRF_CLOCK->TASKS_HFCLKSTART = 1;
+}
+
+void
+ble_phy_rfclk_disable(void)
+{
+    NRF_CLOCK->TASKS_HFCLKSTOP = 1;
 }
 #endif

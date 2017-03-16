@@ -22,8 +22,10 @@
 
 #include "stats/stats.h"
 #include "os/os_eventq.h"
+#include "os/os_callout.h"
 #include "os/os_cputime.h"
 #include "nimble/nimble_opt.h"
+#include "controller/ble_phy.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,11 +63,22 @@ struct ble_ll_obj
 
     /* Number of ACL data packets supported */
     uint8_t ll_num_acl_pkts;
+
+#ifdef BLE_XCVR_RFCLK
+    uint8_t ll_rfclk_state;
+    uint16_t ll_xtal_ticks;
+#else
     uint8_t _pad;
+    uint16_t _pad16;
+#endif
 
     /* ACL data packet size */
     uint16_t ll_acl_pkt_size;
-    uint16_t _pad16;
+
+#ifdef BLE_XCVR_RFCLK
+    uint32_t ll_rfclk_start_time;
+    struct hal_timer ll_rfclk_timer;
+#endif
 
     /* Task event queue */
     struct os_eventq ll_evq;
@@ -382,6 +395,11 @@ int ble_ll_rand_data_get(uint8_t *buf, uint8_t len);
 void ble_ll_rand_prand_get(uint8_t *prand);
 int ble_ll_rand_start(void);
 
+/* Clock management */
+#ifdef BLE_XCVR_RFCLK
+void ble_ll_rfclk_start(uint32_t cputime);
+#endif
+
 /*
  * XXX: temporary LL debug log. Will get removed once we transition to real
  * log
@@ -408,6 +426,11 @@ int ble_ll_rand_start(void);
 #define BLE_LL_LOG_ID_ADV_TXBEG         (50)
 #define BLE_LL_LOG_ID_ADV_TXDONE        (60)
 #define BLE_LL_LOG_ID_SCHED             (80)
+#define BLE_LL_LOG_ID_RFCLK_START       (90)
+#define BLE_LL_LOG_ID_RFCLK_ENABLE      (91)
+#define BLE_LL_LOG_ID_RFCLK_STOP        (95)
+#define BLE_LL_LOG_ID_RFCLK_SCHED_DIS   (96)
+#define BLE_LL_LOG_ID_RFCLK_SCAN_DIS    (97)
 
 #ifdef BLE_LL_LOG
 void ble_ll_log(uint8_t id, uint8_t arg8, uint16_t arg16, uint32_t arg32);

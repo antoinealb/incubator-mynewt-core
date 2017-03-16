@@ -20,6 +20,8 @@
 #ifndef H_BLE_PHY_
 #define H_BLE_PHY_
 
+#include "ble/xcvr.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -127,6 +129,14 @@ void ble_phy_stop_usec_timer(void);
 void ble_phy_wfr_enable(uint32_t wfr_usecs);
 #else
 #define ble_phy_stop_usec_timer()
+#endif
+
+#ifdef BLE_XCVR_RFCLK
+/* Starts rf clock */
+void ble_phy_rfclk_enable(void);
+
+/* Stops rf clock */
+void ble_phy_rfclk_disable(void);
 #endif
 
 /*
