@@ -25,26 +25,6 @@
 #include "controller/ble_ll.h"
 #include "controller/ble_ll_xcvr.h"
 
-#if 0
-#include <string.h>
-#include "sysinit/sysinit.h"
-#include "os/os.h"
-#include "stats/stats.h"
-#include "bsp/bsp.h"
-#include "nimble/ble.h"
-#include "nimble/nimble_opt.h"
-#include "nimble/hci_common.h"
-#include "nimble/ble_hci_trans.h"
-#include "controller/ble_hw.h"
-#include "controller/ble_ll_adv.h"
-#include "controller/ble_ll_sched.h"
-#include "controller/ble_ll_scan.h"
-#include "controller/ble_ll_hci.h"
-#include "controller/ble_ll_whitelist.h"
-#include "controller/ble_ll_resolv.h"
-#include "ble_ll_conn_priv.h"
-#endif
-
 #ifdef BLE_XCVR_RFCLK
 int
 ble_ll_xcvr_rfclk_state(void)
@@ -59,39 +39,6 @@ ble_ll_xcvr_rfclk_state(void)
         }
     }
     return g_ble_ll_data.ll_rfclk_state;
-}
-
-/**
- * Start the rf clock timer running at the specified cputime. The cputime
- * is when the clock should start; it will be settled after xtal ticks have
- * expired.
- *
- * If the clock is ON or SETTLED there is no need to start the timer. If the
- * clock is OFF the timer might be set for some time in the future. If it is,
- * we will reset the time if 'cputime' is earlier than the expiry time.
- *
- * @param cputime
- */
-void
-ble_ll_xcvr_rfclk_start(uint32_t cputime)
-{
-    if (g_ble_ll_data.ll_rfclk_state == BLE_RFCLK_STATE_OFF) {
-
-        /*
-         * If the timer is on the list, we need to see if its expiry is before
-         * 'cputime'. If the expiry is before, no need to do anything. If it
-         * is after, we need to stop the timer and start at new time.
-         */
-        if (g_ble_ll_data.ll_rfclk_timer.link.tqe_prev != NULL) {
-            if ((int32_t)(cputime - g_ble_ll_data.ll_rfclk_timer.expiry) >= 0) {
-                return;
-            }
-            os_cputime_timer_stop(&g_ble_ll_data.ll_rfclk_timer);
-        }
-        os_cputime_timer_start(&g_ble_ll_data.ll_rfclk_timer, cputime);
-        ble_ll_log(BLE_LL_LOG_ID_RFCLK_START, g_ble_ll_data.ll_rfclk_state, 0,
-                   g_ble_ll_data.ll_rfclk_timer.expiry);
-    }
 }
 
 void
@@ -135,7 +82,9 @@ ble_ll_xcvr_rfclk_time_till_settled(void)
 }
 
 /**
- * Called when the timer to turn on the RF CLOCK expires
+ * Called when the timer to turn on the RF CLOCK expires. This function checks
+ * the state of the clock. If the clock is off, the clock is turned on.
+ * Otherwise, we just exit.
  *
  * Context: Interrupt
  *
@@ -145,16 +94,15 @@ void
 ble_ll_xcvr_rfclk_timer_exp(void *arg)
 {
     if (g_ble_ll_data.ll_rfclk_state == BLE_RFCLK_STATE_OFF) {
-        ble_ll_xcvr_rfclk_enable();
-        g_ble_ll_data.ll_rfclk_start_time = g_ble_ll_data.ll_rfclk_timer.expiry;
-        ble_ll_log(BLE_LL_LOG_ID_RFCLK_ENABLE, g_ble_ll_data.ll_rfclk_state, 0,
-                   g_ble_ll_data.ll_rfclk_start_time);
+        ble_ll_xcvr_rfclk_start_now(os_cputime_get32());
     }
 }
 
 /**
- * This API is used to turn on the rfclock without setting the cputimer timer
- * to start the clock at some later point.
+ * This API is used to turn on the rfclock without setting the cputime timer to
+ * start the clock at some later point.
+ *
+ * NOTE: presumes that the state of the rf clock was checked prior to calling.
  *
  * @param now
  */
@@ -163,21 +111,43 @@ ble_ll_xcvr_rfclk_start_now(uint32_t now)
 {
     ble_ll_xcvr_rfclk_enable();
     g_ble_ll_data.ll_rfclk_start_time = now;
-    ble_ll_log(BLE_LL_LOG_ID_RFCLK_ENABLE, g_ble_ll_data.ll_rfclk_state, 0,
-               g_ble_ll_data.ll_rfclk_start_time);
+    ble_ll_log(BLE_LL_LOG_ID_RFCLK_ENABLE, 0, 0, now);
 }
 
-/* WWW: This is really confusing. This is called when we add something
- * to schedule at the start. We want to stop the current cputime timer
- * for the clock and restart it at the new time.
+/**
+ * Starts the timer that will turn the rf clock on. The 'cputime' is
+ * the time at which the clock needs to be settled.
  *
+ * @param cputime   Time at which rfclock should be on and settled.
  */
 void
-ble_ll_rfclk_start(uint32_t cputime)
+ble_ll_xcvr_rfclk_timer_start(uint32_t cputime)
 {
-    /* If we are currently doing something, no need to start the clock */
-    if (g_ble_ll_data.ll_state == BLE_LL_STATE_STANDBY) {
-        ble_ll_xcvr_rfclk_start(cputime - g_ble_ll_data.ll_xtal_ticks);
+    /*
+     * If we are currently in an advertising event or a connection event,
+     * no need to start the cputime timer
+     */
+    if ((g_ble_ll_data.ll_state == BLE_LL_STATE_ADV) ||
+        (g_ble_ll_data.ll_state == BLE_LL_STATE_CONNECTION)) {
+        return;
     }
+
+    /* Account for the settling time */
+    cputime -= g_ble_ll_data.ll_xtal_ticks;
+
+    /*
+     * If the timer is on the list, we need to see if its expiry is before
+     * 'cputime'. If the expiry is before, no need to do anything. If it
+     * is after, we need to stop the timer and start at new time.
+     */
+    if (g_ble_ll_data.ll_rfclk_timer.link.tqe_prev != NULL) {
+        if ((int32_t)(cputime - g_ble_ll_data.ll_rfclk_timer.expiry) >= 0) {
+            return;
+        }
+        os_cputime_timer_stop(&g_ble_ll_data.ll_rfclk_timer);
+    }
+    os_cputime_timer_start(&g_ble_ll_data.ll_rfclk_timer, cputime);
+    ble_ll_log(BLE_LL_LOG_ID_RFCLK_START, g_ble_ll_data.ll_rfclk_state, 0,
+               g_ble_ll_data.ll_rfclk_timer.expiry);
 }
 #endif

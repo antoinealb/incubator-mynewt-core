@@ -395,11 +395,6 @@ int ble_ll_rand_data_get(uint8_t *buf, uint8_t len);
 void ble_ll_rand_prand_get(uint8_t *prand);
 int ble_ll_rand_start(void);
 
-/* Clock management */
-#ifdef BLE_XCVR_RFCLK
-void ble_ll_rfclk_start(uint32_t cputime);
-#endif
-
 /*
  * XXX: temporary LL debug log. Will get removed once we transition to real
  * log

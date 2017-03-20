@@ -930,14 +930,12 @@ ble_ll_scan_event_proc(struct os_event *ev)
                 }
             }
 
-            /* WWW: This should just be an enable. No need to start
-               cputimer here! */
             /*
              * If clock off, start clock. Set next event time to now plus
              * the clock setting time.
              */
             if (rxstate == BLE_RFCLK_STATE_OFF) {
-                ble_ll_xcvr_rfclk_start(now);
+                ble_ll_xcvr_rfclk_start_now(now);
             }
             next_event_time = now + xtal_ticks;
             goto rfclk_not_settled;
