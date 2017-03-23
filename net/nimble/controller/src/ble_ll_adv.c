@@ -759,8 +759,6 @@ ble_ll_adv_sm_stop(struct ble_ll_adv_sm *advsm)
             g_ble_ll_cur_adv_sm = NULL;
             ble_ll_scan_chk_resume();
 #ifdef BLE_XCVR_RFCLK
-            /* WWW */
-            ble_ll_log(201,0,0,0);
             ble_ll_sched_rfclk_chk_restart();
 #endif
         }
@@ -1614,14 +1612,6 @@ ble_ll_adv_done(struct ble_ll_adv_sm *advsm)
 
     /* Schedule advertising transmit */
     ble_ll_adv_set_sched(advsm);
-
-    /* WWW: Need to look at direct advertising (HD) to see if I messed up
-     * the resched pdu call.
-     *
-     * For xcvr clock, we only need to worry when we schedule new adv
-     * event. We want to make sure we dont turn off the clock if we are
-     * not done with the advertising event. Think about this.
-     */
 
     /*
      * In the unlikely event we cant reschedule this, just post a done

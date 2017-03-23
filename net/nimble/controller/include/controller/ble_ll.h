@@ -31,6 +31,32 @@
 extern "C" {
 #endif
 
+/*
+ * XXX:
+ * I guess this should not depend on the 32768 crystal to be honest. This
+ * should be done for TIMER0 as well since the rf clock chews up more current.
+ * Deal with this later.
+ *
+ * Another note: BLE_XTAL_SETTLE_TIME should be bsp related (I guess). There
+ * should be a note in there that the converted usecs to ticks value of this
+ * should not be 0. Thus: if you are using a 32.768 os cputime freq, the min
+ * value of settle time should be 31 usecs. I would suspect all settling times
+ * would exceed 31 usecs.
+ */
+
+/* Determines if we need to turn on/off rf clock */
+#undef BLE_XCVR_RFCLK
+
+/* Transceiver specific definitions */
+#if MYNEWT_VAL(OS_CPUTIME_FREQ) == 32768
+
+/* We will turn on/off rf clock */
+#if MYNEWT_VAL(BLE_XTAL_SETTLE_TIME) != 0
+#define BLE_XCVR_RFCLK
+#endif
+
+#endif
+
 /* Controller revision. */
 #define BLE_LL_SUB_VERS_NR      (0x0000)
 

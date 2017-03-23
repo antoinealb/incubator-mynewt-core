@@ -622,8 +622,6 @@ ble_hs_hci_evt_acl_process(struct os_mbuf *om)
         goto err;
     }
 
-    /* WWW*/
-#if 0
 #if (BLETEST_THROUGHPUT_TEST == 0)
     BLE_HS_LOG(DEBUG, "ble_hs_hci_evt_acl_process(): conn_handle=%u pb=%x "
                       "len=%u data=",
@@ -633,7 +631,6 @@ ble_hs_hci_evt_acl_process(struct os_mbuf *om)
     ble_hs_log_mbuf(om);
     BLE_HS_LOG(DEBUG, "\n");
 #endif
-#endif  /* WWW */
 
     if (hci_hdr.hdh_len != OS_MBUF_PKTHDR(om)->omp_len) {
         rc = BLE_HS_EBADDATA;

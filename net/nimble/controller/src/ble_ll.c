@@ -225,15 +225,6 @@ ble_ll_log(uint8_t id, uint8_t arg8, uint16_t arg16, uint32_t arg32)
     os_sr_t sr;
     struct ble_ll_log *le;
 
-    /* WWW */
-    if ((id >= 90) || (id == 10) || (id == 20)) {
-        goto good;
-    } else {
-        return;
-    }
-good:
-    /* WWW */
-
     OS_ENTER_CRITICAL(sr);
     le = &g_ble_ll_log[g_ble_ll_log_index];
     le->cputime = os_cputime_get32();
